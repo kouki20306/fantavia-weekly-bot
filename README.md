@@ -1,0 +1,1 @@
+# fantavia-weekly-bot
