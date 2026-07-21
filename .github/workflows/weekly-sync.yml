@@ -3,7 +3,7 @@ name: Weekly Sync
 on:
   schedule:
     # 火曜0:05 JST = 月曜15:05 UTC
-    - cron: '5 15 * * 1'
+    - cron: '5 15 * * 2'
   workflow_dispatch:
 
 jobs:
