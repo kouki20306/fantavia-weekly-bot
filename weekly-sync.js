@@ -10,6 +10,21 @@ const dbId = process.env.NOTION_DB_ID;
 const norm = (s) =>
   s.replace(/:white_check_mark:/g, "").replace(/[・\-\s　✅]/g, "").trim();
 
+// 「担当」セレクトに選択肢が無ければ追加する
+async function ensureSelectOption(name) {
+  const db = await notion.databases.retrieve({ database_id: dbId });
+  const options = db.properties["担当"].select.options;
+  if (options.some((o) => o.name === name)) return;
+
+  await notion.databases.update({
+    database_id: dbId,
+    properties: {
+      "担当": { select: { options: [...options, { name }] } },
+    },
+  });
+  console.log(`🆕 担当に追加: ${name}`);
+}
+
 function parse(text) {
   const lines = text.split("\n");
   const done = [];
@@ -21,16 +36,12 @@ function parse(text) {
     if (!line) continue;
 
     if (line.includes("先週のToDo")) { mode = "last"; continue; }
-    if (line.includes("達成度"))     { mode = null;   continue; }
+    if (line.includes("達成度")) { mode = null; continue; }
     if (line.includes("今週のToDo")) { mode = "this"; continue; }
 
     if (mode === "last" && (line.includes("✅") || line.includes(":white_check_mark:"))) {
       done.push(
-        line
-          .replace("✅", "")
-          .replace(":white_check_mark:", "")
-          .replace(/^・/, "")
-          .trim()
+        line.replace("✅", "").replace(":white_check_mark:", "").replace(/^・/, "").trim()
       );
     }
     if (mode === "this") {
@@ -47,7 +58,6 @@ async function main() {
 
   const thread = await slack.conversations.replies({ channel, ts: parent.ts });
   const replies = thread.messages.filter((m) => m.ts !== parent.ts);
-
   const today = new Date().toISOString().slice(0, 10);
 
   for (const r of replies) {
@@ -57,12 +67,13 @@ async function main() {
 
     console.log(`\n=== ${name} ===`);
 
+    await ensureSelectOption(name);
+
     const existing = await notion.databases.query({
       database_id: dbId,
       filter: { property: "担当", select: { equals: name } },
     });
 
-    // ✅付き → 完了に更新
     for (const d of done) {
       const hit = existing.results.find((p) => {
         const title = p.properties["タスク名"].title[0]?.plain_text || "";
@@ -80,18 +91,13 @@ async function main() {
       }
     }
 
-    // 今週のToDo → 追加（重複はスキップ）
     const doneNorm = done.map(norm);
 
     for (const t of todos) {
       const dup = existing.results.find((p) => {
         const title = p.properties["タスク名"].title[0]?.plain_text || "";
         const status = p.properties["ステータス"].status?.name || "";
-        return (
-          norm(title) === norm(t) &&
-          status !== "完了" &&
-          !doneNorm.includes(norm(t))
-        );
+        return norm(title) === norm(t) && status !== "完了" && !doneNorm.includes(norm(t));
       });
 
       if (dup) {
