@@ -2,7 +2,8 @@ name: Weekly Report
 
 on:
   schedule:
-    - cron: '0 3 * * 2'
+    # 目標: 月曜0:00 JST（遅延見込みで5h前倒し）
+    - cron: '0 10 * * 0'
   workflow_dispatch:
 
 jobs:
